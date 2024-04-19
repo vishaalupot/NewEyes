@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!--        359-->
+
+<!--    <TextureView-->
+<!--        android:id="@+id/textureView2"-->
+<!--        android:layout_width="match_parent"-->
+<!--        android:layout_height="365dp"-->
+<!--        android:layout_below="@+id/textureView"-->
+<!--        android:layout_marginTop="2dp" />-->
+
+    <TextureView
+        android:id="@+id/textureView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginTop="0dp"
+        android:layout_marginBottom="0dp" />
+
+    <TextView
+        android:id="@+id/subtitles"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_gravity="fill_horizontal"
+        android:layout_marginTop="187dp"
+        android:layout_marginEnd="95dp"
+        android:background="@drawable/curved_background"
+        android:fontFamily="@font/consola"
+        android:rotation="90"
+        android:textColor="@color/white"
+        android:textSize="14sp" />
+</RelativeLayout>
