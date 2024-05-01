@@ -1,14 +1,21 @@
 package com.example.neweyes
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
+import android.graphics.drawable.LayerDrawable
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.media.AudioManager
+import android.net.ConnectivityManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -20,24 +27,35 @@ import android.view.TextureView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.lango.record.AndroidAudioRecorder
+import com.google.gson.JsonParser
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
+    private lateinit var volumeChangeReceiver: VolumeChangeReceiver
     private lateinit var textureView: TextureView
     private lateinit var cameraManager: CameraManager
     private lateinit var cameraDevice: CameraDevice
@@ -45,8 +63,25 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private lateinit var capReq: CaptureRequest.Builder
     private lateinit var handler: Handler
     private lateinit var handlerThread: HandlerThread
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS) // Set connection timeout
+        .readTimeout(60, TimeUnit.SECONDS)    // Set read timeout
+        .writeTimeout(60, TimeUnit.SECONDS)   // Set write timeout
+        .build()
     private lateinit var textToSpeech: TextToSpeech
+    var engRes = "{\"text\":\"Where\"}"
+    var response: String = ""
+    var responseBody1 = ""
+    var correct: Boolean by mutableStateOf(false)
+    var content = ""
+    var res: String = ""
+    private lateinit var audioManager: AudioManager
+    private var extractedText = ""
+
+    private val recorder by lazy {
+        AndroidAudioRecorder(applicationContext)
+    }
+    private var audioFile: File? = null
 
 
     override fun onDestroy() {
@@ -59,6 +94,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        //for audio
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            0
+        )
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        volumeChangeReceiver = VolumeChangeReceiver()
+        val filter = IntentFilter()
+        filter.addAction("android.media.VOLUME_CHANGED_ACTION")
+        registerReceiver(volumeChangeReceiver, filter)
+
+
+
         handlerThread = HandlerThread("CameraBackground")
         handlerThread.start()
         handler = Handler(handlerThread.looper)
@@ -67,6 +117,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         textureView = findViewById(R.id.textureView)
         textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
                 openCamera()
             }
@@ -78,8 +129,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
 
             override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
-
-
         }
     }
 
@@ -95,8 +144,142 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    fun startRecording() {
+        try {
+            Toast.makeText(applicationContext, "Start Speaking", Toast.LENGTH_SHORT).show()
+            File(cacheDir, "sample.mp3").also {
+                recorder.start(it)
+                audioFile = it
+                response = ""   // Reset the response variable
+                engRes = " "     // Reset the engRes variable
+                content = ""
+                correct = false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+//            Log.d("tag","&$>+e.printStackTrace(")
+        }
+    }
 
+    fun stopRecording() {
+        try {
 
+            recorder.stop()
+            Log.d("tag","!!>>")
+            res = ""
+            res = audioFile?.let { transcribeAudio(it) }.toString()
+            if(res.isNotEmpty()){
+                val jsonObject = JSONObject(res)
+                extractedText = jsonObject.optString("text", "DefaultText")
+                takePicture( )
+
+                Toast.makeText(applicationContext, extractedText, Toast.LENGTH_SHORT).show()
+
+//                val sub: Unit = findViewById<TextView?>(R.id.subtitles).setText(extractedText)
+//                engRes = chatTranslateToEnglish(res)
+            }
+            else{
+                Toast.makeText(applicationContext, "No internet", Toast.LENGTH_SHORT).show()
+            }
+
+        }catch(e:Exception){
+            Log.d("tag","()"+e.printStackTrace())
+        }
+    }
+
+    @SuppressLint("SuspiciousIndentation")
+    fun chatTranslateToEnglish(inputText: String): String {
+        Thread {
+            val apiKey = "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"
+            val apiUrl = "https://api.openai.com/v1/chat/completions"
+            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+            val requestData = JSONObject()
+            requestData.put("model", "gpt-3.5-turbo")
+            val messages = JSONArray()
+            val systemMessage = JSONObject()
+            systemMessage.put("role", "system")
+            systemMessage.put(
+                "content",
+                "Translate the text to english and do not reply anything else strictly"
+            )
+            val userMessage = JSONObject()
+            userMessage.put("role", "user")
+            userMessage.put("content", inputText)  // Include the inputText in the conversation
+
+            messages.put(systemMessage)
+            messages.put(userMessage)
+
+            requestData.put("messages", messages)
+
+            val requestBody = RequestBody.create(jsonMediaType, requestData.toString())
+
+            val request = Request.Builder()
+                .url(apiUrl)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .post(requestBody)
+
+            try {
+                responseBody1 = client.newCall(request.build()).execute().use { response ->
+                    response.body?.string() ?: ""
+                }
+                val jsonResponse = JsonParser.parseString(responseBody1).asJsonObject
+                content = jsonResponse.getAsJsonArray("choices")
+                    .firstOrNull()
+                    ?.asJsonObject
+                    ?.getAsJsonObject("message")
+                    ?.get("content")
+                    ?.asString
+                    ?: ""
+
+                println("#> Response Content: $content")
+//                println("#> Response: $responseBody1")
+                correct = true
+            } catch (e: IOException) {
+                e.printStackTrace()
+                println("!> Request failed with exception: ${e.message}")
+            }
+        }.start()
+
+        while (content == "") {
+        }
+        return content;
+
+    }
+
+    fun transcribeAudio(audioFile: File): Any? {
+        val audioRequestBody = audioFile.asRequestBody("audio/*".toMediaType())
+        val formBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", audioFile.name, audioRequestBody)
+            .addFormDataPart("model", "whisper-1")
+            .addFormDataPart("language", "en")
+            .build()
+
+        val request = Request.Builder()
+            .url("https://api.openai.com/v1/audio/transcriptions")
+            .header(
+                "Authorization",
+                "Bearer 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"
+            )
+            .post(formBody)
+
+        Thread {
+            try {
+                response = client.newCall(request.build()).execute().use { response ->
+                    response.body?.string() ?: ""
+                }
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                correct = true
+            }
+        }.start()
+        while (response == "") {
+        }
+        correct = true
+        println("&>" + response)
+        return response;
+    }
 
     // Function to convert text to speech
     private fun speakText(text: String) {
@@ -144,7 +327,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     put(message)
                 }
                 put("messages", messages)
-                put("max_tokens", 300)
+                put("max_tokens", 500)
             }
 
             // Make HTTP POST request to OpenAI API
@@ -186,7 +369,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             val bitmap = textureView.bitmap ?: return
             Log.d("takePicture", "Bitmap captured successfully")
             val byteArrayOutputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 50, byteArrayOutputStream)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 10, byteArrayOutputStream)
             val imageBytes = byteArrayOutputStream.toByteArray()
             val base64Image = Base64.encodeToString(imageBytes, Base64.DEFAULT)
 
@@ -204,8 +387,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         val content = JSONArray().apply {
                             val text = JSONObject().apply {
                                 put("type", "text")
-                                put("text", "What is in this image? Explain it to a blind person in short words")
+                                put("text", extractedText)
                             }
+
                             put(text)
 
                             val imageUrl = JSONObject().apply {
@@ -227,7 +411,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
 
             val api_key = "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"
-            val client = OkHttpClient()
+            val client = OkHttpClient.Builder()
+                .connectTimeout(60, TimeUnit.SECONDS) // Set connection timeout
+                .readTimeout(60, TimeUnit.SECONDS)    // Set read timeout
+                .writeTimeout(60, TimeUnit.SECONDS)   // Set write timeout
+                .build()
 
             val mediaType = "application/json".toMediaTypeOrNull()
             val requestBody = RequestBody.create(mediaType, payload.toString())
@@ -289,6 +477,64 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private inner class VolumeChangeReceiver : BroadcastReceiver() {
+        private var lastVolume = 0
+
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "android.media.VOLUME_CHANGED_ACTION") {
+                val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+                // Check if volume is increased or decreased
+                if (currentVolume > lastVolume) {
+                    // Volume increased, executeVolumeUpCommand()
+                    executeVolumeUpCommand()
+                } else if (currentVolume < lastVolume) {
+                    // Volume decreased, executeVolumeDownCommand()
+                    executeVolumeDownCommand()
+                }
+                lastVolume = currentVolume
+            }
+        }
+    }
+
+    fun isNetworkAvailable(context: Context): Boolean {
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val networkInfo = connectivityManager.activeNetworkInfo
+        return networkInfo != null && networkInfo.isConnected
+    }
+
+    private fun executeVolumeUpCommand() {
+
+        findViewById<TextView?>(R.id.subtitles).setText(" ")
+        val subtitlesTextView = findViewById<TextView>(R.id.subtitles)
+        val curvedBackgroundDrawable = ContextCompat.getDrawable(this, R.drawable.start)
+        val backgroundLayerDrawable = LayerDrawable(arrayOf(curvedBackgroundDrawable))
+        subtitlesTextView.background = backgroundLayerDrawable
+        if (isNetworkAvailable(this)) {
+            startRecording()
+        }
+        else{
+            Toast.makeText(applicationContext, "No internet", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun executeVolumeDownCommand() {
+        val subtitlesTextView = findViewById<TextView>(R.id.subtitles)
+        subtitlesTextView.setBackgroundColor(ContextCompat.getColor(this, R.color.black))
+        val curvedBackgroundDrawable = ContextCompat.getDrawable(this, R.drawable.curved_background)
+        val backgroundLayerDrawable = LayerDrawable(arrayOf(curvedBackgroundDrawable))
+        subtitlesTextView.background = backgroundLayerDrawable
+        if (isNetworkAvailable(this)) {
+            stopRecording()
+        }
+        else{
+            Toast.makeText(applicationContext, "No internet", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+
     fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         return true
     }
@@ -321,7 +567,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                 cameraCaptureSession.setRepeatingRequest(capReq.build(), null, null)
                                 val delayMillis = 5000L
                                 Handler().postDelayed({
-                                    takePicture()
+//                                    takePicture()
                                 }, delayMillis)
                             }
 
