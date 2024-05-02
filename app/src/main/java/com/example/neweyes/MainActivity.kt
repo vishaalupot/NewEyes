@@ -190,7 +190,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     @SuppressLint("SuspiciousIndentation")
     fun chatTranslateToEnglish(inputText: String): String {
         Thread {
-            val apiKey = " "
             val apiUrl = "https://api.openai.com/v1/chat/completions"
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()
             val requestData = JSONObject()
@@ -331,7 +330,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
 
             // Make HTTP POST request to OpenAI API
-            val api_key = ""
             val client = OkHttpClient()
 
             val mediaType = "application/json".toMediaTypeOrNull()
@@ -410,7 +408,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 put("max_tokens", 300)
             }
 
-            val api_key = ""
+            val api_key = "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"
             val client = OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS) // Set connection timeout
                 .readTimeout(60, TimeUnit.SECONDS)    // Set read timeout
