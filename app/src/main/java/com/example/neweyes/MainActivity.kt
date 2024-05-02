@@ -216,7 +216,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             val request = Request.Builder()
                 .url(apiUrl)
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Authorization", "Bearer $value")
                 .post(requestBody)
 
             try {
