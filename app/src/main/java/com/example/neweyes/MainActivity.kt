@@ -190,7 +190,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     @SuppressLint("SuspiciousIndentation")
     fun chatTranslateToEnglish(inputText: String): String {
         Thread {
-            val value= "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"
+//            val value= "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"
             val apiUrl = "https://api.openai.com/v1/chat/completions"
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()
             val requestData = JSONObject()
@@ -216,7 +216,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             val request = Request.Builder()
                 .url(apiUrl)
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $value")
+                .addHeader("Authorization", "Bearer ") //$value
                 .post(requestBody)
 
             try {
@@ -331,7 +331,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
 
             // Make HTTP POST request to OpenAI API
-            val value = "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"
+//            val value = "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"
             val client = OkHttpClient()
 
             val mediaType = "application/json".toMediaTypeOrNull()
@@ -340,7 +340,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             val request = Request.Builder()
                 .url("https://api.openai.com/v1/chat/completions")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $value")
+                .addHeader("Authorization", "Bearer ") //$value
                 .post(requestBody)
                 .build()
 
@@ -410,7 +410,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 put("max_tokens", 300)
             }
 
-            val value = "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"
+//            val value = "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"
             val client = OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS) // Set connection timeout
                 .readTimeout(60, TimeUnit.SECONDS)    // Set read timeout
@@ -423,7 +423,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             val request = Request.Builder()
                 .url("https://api.openai.com/v1/chat/completions")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $value")
+                .addHeader("Authorization", "Bearer ") //$value
                 .post(requestBody)
                 .build()
 
